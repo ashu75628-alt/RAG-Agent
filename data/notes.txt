@@ -1,0 +1,4 @@
+Python is a programming language used for AI and web development.
+LangChain is a framework for building LLM applications.
+FAISS is used for vector similarity search.
+RAG stands for Retrieval Augmented Generation.
