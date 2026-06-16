@@ -1,7 +1,5 @@
 import streamlit as st
 from rag_chain import load_rag_chain
-import json
-from datetime import datetime
 
 st.set_page_config(
     page_title="RAG Chatbot",
@@ -24,7 +22,6 @@ if "messages" not in st.session_state:
 if "chat_sessions" not in st.session_state:
     st.session_state.chat_sessions = {}
 
-# Sidebar - Chat History
 with st.sidebar:
     st.header("💬 Chat History")
 
@@ -56,12 +53,10 @@ with st.sidebar:
 
 st.divider()
 
-# Show previous messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# User input
 if prompt := st.chat_input("Ask something..."):
 
     with st.chat_message("user"):
@@ -74,7 +69,7 @@ if prompt := st.chat_input("Ask something..."):
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = chain.invoke(prompt, chat_history=st.session_state.messages)
+            response = chain.invoke(prompt, chat_history=st.session_state.messages[:-1])
             st.markdown(response)
 
     st.session_state.messages.append({
