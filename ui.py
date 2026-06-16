@@ -1,8 +1,9 @@
 import streamlit as st
+import os
 from rag_chain import load_rag_chain
 
 st.set_page_config(
-    page_title="Knowledge Companion",
+    page_title="Papa AI",
     page_icon="📚",
     layout="centered"
 )
@@ -83,8 +84,6 @@ st.markdown("*Ask anything — but backchodi allowed nhi hai, Abhi new hu tame l
 def get_chain():
     return load_rag_chain()
 
-chain = get_chain()
-
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -93,6 +92,33 @@ if "chat_sessions" not in st.session_state:
 
 with st.sidebar:
     st.header("💬 Conversations")
+
+    st.subheader("📤 Add Knowledge")
+    uploaded_files = st.file_uploader(
+        "Upload PDF or TXT files",
+        type=["pdf", "txt"],
+        accept_multiple_files=True
+    )
+
+    if uploaded_files:
+        if st.button("📥 Process Files", use_container_width=True):
+            with st.spinner("Processing your files..."):
+                os.makedirs("data", exist_ok=True)
+
+                for file in uploaded_files:
+                    file_path = os.path.join("data", file.name)
+                    with open(file_path, "wb") as f:
+                        f.write(file.getbuffer())
+
+                from ingest import ingest_documents
+                ingest_documents()
+
+                st.cache_resource.clear()
+
+            st.success(f"✅ {len(uploaded_files)} file(s) added to knowledge base!")
+            st.rerun()
+
+    st.divider()
 
     if st.button("➕  New conversation", use_container_width=True):
         if st.session_state.messages:
@@ -119,6 +145,8 @@ with st.sidebar:
         st.session_state.chat_sessions = {}
         st.session_state.messages = []
         st.rerun()
+
+chain = get_chain()
 
 st.divider()
 
