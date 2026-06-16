@@ -22,7 +22,9 @@ def load_rag_chain():
         groq_api_key=os.getenv("GROQ_API_KEY")
     )
 
-    doc_prompt = PromptTemplate.from_template("""You are a friendly, casual assistant talking to a returning user.
+    doc_prompt = PromptTemplate.from_template("""You are a friendly, casual assistant talking to a user.
+IMPORTANT: Only reference previous conversation if "Conversation History" below actually contains messages. If it says "No previous conversation," treat this as a brand new conversation and greet naturally without saying things like "great to see you again" or "you're back."
+
 Use the conversation history (if any) to understand follow-up questions.
 Use the context below to answer naturally and warmly.
 If the context does NOT contain enough information, respond with EXACTLY: "NEED_WEB_SEARCH"
@@ -38,6 +40,8 @@ Question: {question}
 Answer:""")
 
     web_prompt = PromptTemplate.from_template("""You are a friendly, casual assistant.
+IMPORTANT: Only reference previous conversation if "Conversation History" below actually contains messages. If it says "No previous conversation," treat this as a brand new conversation and greet naturally without saying things like "great to see you again" or "you're back."
+
 Use the conversation history and web search results to answer naturally.
 
 Conversation History:
