@@ -14,7 +14,7 @@ def load_rag_chain():
     vectorstore = FAISS.load_local(
         "vectorstore/", embeddings, allow_dangerous_deserialization=True
     )
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
 
     llm = ChatGroq(
         model="llama-3.3-70b-versatile",
@@ -22,10 +22,13 @@ def load_rag_chain():
         groq_api_key=os.getenv("GROQ_API_KEY")
     )
 
-    # Prompt for document-based answers
-    doc_prompt = PromptTemplate.from_template("""You are a friendly, casual assistant.
+    doc_prompt = PromptTemplate.from_template("""You are a friendly, casual assistant talking to a returning user.
+Use the conversation history (if any) to understand follow-up questions.
 Use the context below to answer naturally and warmly.
-If the context does NOT contain enough information to answer the question, respond with EXACTLY this phrase and nothing else: "NEED_WEB_SEARCH"
+If the context does NOT contain enough information, respond with EXACTLY: "NEED_WEB_SEARCH"
+
+Conversation History:
+{history}
 
 Context:
 {context}
@@ -34,9 +37,11 @@ Question: {question}
 
 Answer:""")
 
-    # Prompt for web-based answers
-    web_prompt = PromptTemplate.from_template("""You are a friendly, casual assistant who talks like a helpful friend.
-Use the web search results below to answer the question naturally and warmly.
+    web_prompt = PromptTemplate.from_template("""You are a friendly, casual assistant.
+Use the conversation history and web search results to answer naturally.
+
+Conversation History:
+{history}
 
 Web Search Results:
 {web_results}
@@ -48,33 +53,63 @@ Answer (casual & friendly tone):""")
     def web_search(query):
         try:
             results = DDGS().text(query, max_results=3)
-            combined = "\n\n".join([r["body"] for r in results])
-            return combined
-        except Exception as e:
+            return "\n\n".join([r["body"] for r in results])
+        except Exception:
             return "Web search failed."
 
-    def format_docs(docs):
-        return "\n\n".join(doc.page_content for doc in docs)
+    def format_docs_with_sources(docs):
+        formatted = []
+        sources = []
+        for i, doc in enumerate(docs):
+            source_name = doc.metadata.get("source", "Unknown").split("/")[-1].split("\\")[-1]
+            page = doc.metadata.get("page", None)
+            tag = f"[Source {i+1}: {source_name}" + (f", page {page+1}" if page is not None else "") + "]"
+            formatted.append(f"{tag}\n{doc.page_content}")
+            sources.append(f"📄 {source_name}" + (f" (page {page+1})" if page is not None else ""))
+        return "\n\n".join(formatted), list(set(sources))
 
-    def adaptive_chain(question):
-        # Step 1: Try document-based answer first
+    def format_history(chat_history):
+        if not chat_history:
+            return "No previous conversation."
+        formatted = []
+        for msg in chat_history[-6:]:  # Last 3 exchanges
+            role = "User" if msg["role"] == "user" else "Assistant"
+            formatted.append(f"{role}: {msg['content']}")
+        return "\n".join(formatted)
+
+    def adaptive_chain(question, chat_history=None):
+        history_text = format_history(chat_history)
+
         docs = retriever.invoke(question)
-        context = format_docs(docs)
+        context, sources = format_docs_with_sources(docs)
 
         doc_chain = doc_prompt | llm | StrOutputParser()
-        answer = doc_chain.invoke({"context": context, "question": question})
+        answer = doc_chain.invoke({
+            "history": history_text,
+            "context": context,
+            "question": question
+        })
 
-        # Step 2: If not enough info, fall back to web search
+        used_web = False
         if "NEED_WEB_SEARCH" in answer:
+            used_web = True
             web_results = web_search(question)
             web_chain = web_prompt | llm | StrOutputParser()
-            answer = web_chain.invoke({"web_results": web_results, "question": question})
-            answer = "🌐 *(Searched the web for this)*\n\n" + answer
+            answer = web_chain.invoke({
+                "history": history_text,
+                "web_results": web_results,
+                "question": question
+            })
+            answer = "🌐 *Searched the web for this*\n\n" + answer
+        else:
+            if sources:
+                source_list = "\n".join(sources)
+                answer += f"\n\n---\n📚 **Sources:**\n{source_list}"
 
         return answer
 
     class AdaptiveChain:
-        def invoke(self, question):
-            return adaptive_chain(question)
+        def invoke(self, question, chat_history=None):
+            return adaptive_chain(question, chat_history)
 
     return AdaptiveChain()

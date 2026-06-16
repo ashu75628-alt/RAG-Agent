@@ -74,7 +74,7 @@ if prompt := st.chat_input("Ask something..."):
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = chain.invoke(prompt)
+            response = chain.invoke(prompt, chat_history=st.session_state.messages)
             st.markdown(response)
 
     st.session_state.messages.append({
